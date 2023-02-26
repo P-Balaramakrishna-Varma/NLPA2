@@ -4,7 +4,11 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
-
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+import os
 
 
 
@@ -46,7 +50,7 @@ class PosTagModel(torch.nn.Module):
         return X
         
 
-def train_loop(model, loss_fn, optimizer, train_dataloader):
+def train_loop(model, loss_fn, optimizer, train_dataloader, device):
     model.train()
     for batch, (X, y) in enumerate(train_dataloader):
         # Getting data
@@ -64,7 +68,7 @@ def train_loop(model, loss_fn, optimizer, train_dataloader):
         optimizer.step()
 
 
-def eval_model(model, loss_fn, data_loader):
+def eval_model(model, loss_fn, data_loader, device):
     model.eval()
     total_loss, correct, total_pred = 0, 0, 0
     with torch.no_grad():
@@ -127,10 +131,24 @@ def custom_collate(batch):
 
 
 
-if __name__ == "__main__":
-    # Configuaration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Parallizing across multiple GPUs
+def ddp_setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    init_process_group(backend='nccl', rank=rank, world_size=world_size)
+
+
+def main(rank, world_size):
+    # Configuaration
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    ddp_setup(rank, world_size)
+    device = rank
+
+
+
+
+    # Hyperparameters
     embedding_dim = 128
     hidden_dim  = 128
     no_layers = 2
@@ -145,15 +163,15 @@ if __name__ == "__main__":
     # Loading data
     train_file = "./UD_English-Atis/en_atis-ud-train.conllu"
     train_dataset = PosTagDataset(train_file)
-    train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
+    train_dataloader = DataLoader(train_dataset, batch_size, shuffle=False, collate_fn=custom_collate, sampler=DistributedSampler(train_dataset))
 
     dev_file = "./UD_English-Atis/en_atis-ud-dev.conllu"
     dev_dataset = PosTagDataset(dev_file)
-    dev_dataloader = DataLoader(dev_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
+    dev_dataloader = DataLoader(dev_dataset, batch_size, shuffle=False, collate_fn=custom_collate, sampler=DistributedSampler(dev_dataset))
 
     test_file = "./UD_English-Atis/en_atis-ud-test.conllu"
     test_dataset = PosTagDataset(test_file)
-    test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
+    test_dataloader = DataLoader(test_dataset, batch_size, shuffle=False, collate_fn=custom_collate, sampler=DistributedSampler(test_dataset))
 
 
 
@@ -163,6 +181,7 @@ if __name__ == "__main__":
     no_pos_tags = len(train_dataset.pos_tag_index)
 
     model = PosTagModel(vocab_size, no_pos_tags, embedding_dim, hidden_dim, no_layers).to(device)
+    model = DDP(model, device_ids=[device])
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0, reduction="sum")
     optimizer = torch.optim.SGD(model.parameters(), lr)
 
@@ -170,14 +189,25 @@ if __name__ == "__main__":
 
 
   # Training
-    epochs = 5
+    epochs = 20
     for t in tqdm(range(epochs)):
-        train_loop(model, loss_fn, optimizer, train_dataloader)
-        train_metrics = eval_model(model, loss_fn, train_dataloader)
-        dev_metrics = eval_model(model, loss_fn, dev_dataloader)
-        print("Epoch: ", t)
-        print("Train Loss: " + str(train_metrics[0]) + "   Train Accuracy: " + str(train_metrics[1]))
-        print("Dev Loss: " + str(dev_metrics[0]) + "   Dev Accuracy: " + str(dev_metrics[1]))
-        print("\n\n")
+        train_loop(model, loss_fn, optimizer, train_dataloader, device)
+        train_metrics = eval_model(model, loss_fn, train_dataloader, device)
+        dev_metrics = eval_model(model, loss_fn, dev_dataloader, device)
+        #print("Epoch: ", t)
+        #print("Train Loss: " + str(train_metrics[0]) + "   Train Accuracy: " + str(train_metrics[1]))
+        #print("Dev Loss: " + str(dev_metrics[0]) + "   Dev Accuracy: " + str(dev_metrics[1]))
+        #print("\n\n")
     print("Done!")
+    destroy_process_group()    
+
+
+
+
+
+
+if __name__ == "__main__":
+    world_size = torch.cuda.device_count()
+    assert world_size == 2
+    mp.spawn(main, args=(world_size,), nprocs=world_size)
     

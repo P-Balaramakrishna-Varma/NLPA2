@@ -8,3 +8,6 @@
 ** cross entropy loss 0 ignore index !!! ** - loss does not effect
 
 -- Kfold validation ---testin
+
+## syncroniazation slowest of all * device counts
+## add up loss function to get toatla loss
