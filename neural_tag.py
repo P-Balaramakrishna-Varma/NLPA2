@@ -66,7 +66,7 @@ def train_loop(model, loss_fn, optimizer, train_dataloader):
 
 def eval_model(model, loss_fn, data_loader):
     model.eval()
-    total_loss, correct = 0, 0
+    total_loss, correct, total_pred = 0, 0, 0
     with torch.no_grad():
         for X, y in data_loader:
             X, y = X.to(device), y.to(device)
@@ -77,7 +77,8 @@ def eval_model(model, loss_fn, data_loader):
             
             total_loss += loss.item()
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-    return total_loss, correct/len(data_loader.dataset)
+            total_pred += y.shape[0]
+    return total_loss, (correct * 100) / total_pred 
 
 
 
@@ -91,8 +92,10 @@ def get_data(data_file, vocab_index, pos_tag_index):
         Sentence = []
         tags = []
         for token in TokenList:
-            #print(token["form"], token["upos"])
-            Sentence.append(vocab_index[token["form"]])
+            if token["form"] in vocab_index:
+                Sentence.append(vocab_index[token["form"]])
+            else:
+                Sentence.append(vocab_index["<unk>"])
             tags.append(pos_tag_index[token["upos"]])
         Sentences.append(Sentence)
         Tag_Sequences.append(tags)
@@ -100,12 +103,16 @@ def get_data(data_file, vocab_index, pos_tag_index):
 
 
 def get_vocab_index(data_file):
-    vocab_index = {"pad": 0}
+    vocab_index = {"pad": 0, "<unk>": 1}
+    sigletons = {}
     TokenLists = conllu.parse_incr(open(data_file, "r", encoding="utf-8"))
     for TokenList in TokenLists:
         for token in TokenList:
-            if token["form"] not in vocab_index:
-                vocab_index[token["form"]] = len(vocab_index)
+            if token["form"] not in sigletons:
+                vocab_index[token["form"]] = 1
+            else:
+                if token["form"] not in vocab_index:
+                    vocab_index[token["form"]] = len(vocab_index)
     return vocab_index
 
 
@@ -144,6 +151,10 @@ if __name__ == "__main__":
     dev_dataset = PosTagDataset(dev_file)
     dev_dataloader = DataLoader(dev_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
 
+    test_file = "./UD_English-Atis/en_atis-ud-test.conllu"
+    test_dataset = PosTagDataset(test_file)
+    test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
+
 
 
 
@@ -155,18 +166,18 @@ if __name__ == "__main__":
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0, reduction="sum")
     optimizer = torch.optim.SGD(model.parameters(), lr)
 
-    eval_model(model, loss_fn, train_dataloader)
+
 
 
   # Training
-    epochs = 10
+    epochs = 5
     for t in tqdm(range(epochs)):
         train_loop(model, loss_fn, optimizer, train_dataloader)
         train_metrics = eval_model(model, loss_fn, train_dataloader)
-        #dev_metrics = eval_model(model, loss_fn, dev_dataloader)
+        dev_metrics = eval_model(model, loss_fn, dev_dataloader)
         print("Epoch: ", t)
         print("Train Loss: " + str(train_metrics[0]) + "   Train Accuracy: " + str(train_metrics[1]))
-        #print("Dev Loss: " + str(dev_metrics[0]) + "   Dev Accuracy: " + str(dev_metrics[1]))
+        print("Dev Loss: " + str(dev_metrics[0]) + "   Dev Accuracy: " + str(dev_metrics[1]))
         print("\n\n")
     print("Done!")
     
