@@ -143,8 +143,7 @@ def main(rank, world_size):
     # Configuaration
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ddp_setup(rank, world_size)
-    device = rank
-
+    device = torch.device("cuda", rank)
 
 
 
@@ -180,11 +179,11 @@ def main(rank, world_size):
     vocab_size = len(train_dataset.vocab_index)
     no_pos_tags = len(train_dataset.pos_tag_index)
 
-    model = PosTagModel(vocab_size, no_pos_tags, embedding_dim, hidden_dim, no_layers).to(device)
-    model = DDP(model, device_ids=[device])
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0, reduction="sum")
+    model = PosTagModel(vocab_size, no_pos_tags, embedding_dim, hidden_dim, no_layers).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr)
 
+    model = DDP(model, device_ids=[device])
 
 
 
@@ -194,10 +193,6 @@ def main(rank, world_size):
         train_loop(model, loss_fn, optimizer, train_dataloader, device)
         train_metrics = eval_model(model, loss_fn, train_dataloader, device)
         dev_metrics = eval_model(model, loss_fn, dev_dataloader, device)
-        #print("Epoch: ", t)
-        #print("Train Loss: " + str(train_metrics[0]) + "   Train Accuracy: " + str(train_metrics[1]))
-        #print("Dev Loss: " + str(dev_metrics[0]) + "   Dev Accuracy: " + str(dev_metrics[1]))
-        #print("\n\n")
     print("Done!")
     destroy_process_group()    
 
