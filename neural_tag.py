@@ -252,6 +252,7 @@ def main__GPU():
         train_metrics = eval_model(model, loss_fn, train_dataloader, device)
         dev_metrics = eval_model(model, loss_fn, dev_dataloader, device)
     print("Done!")
+    #torch.save(model.state_dict(), 'model_weights.pth')
 
 
 def main_tpu():
@@ -308,7 +309,7 @@ if __name__ == "__main__":
         mp.spawn(main_distributed_GPU, args=(world_size,), nprocs=world_size)
     elif(sys.argv[1] == "gpu"):
         main__GPU()
-    elif(sys.argv[1] == "TPU"):
+    elif(sys.argv[1] == "tpu"):
         pass
     else:
         print("Invalid argument")

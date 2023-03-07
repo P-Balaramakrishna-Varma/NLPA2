@@ -11,3 +11,7 @@
 
 ## syncroniazation slowest of all * device counts
 ## add up loss function to get toatla loss
+
+
+input sentnce enter is end of sentence
+nltk word tokenizer
