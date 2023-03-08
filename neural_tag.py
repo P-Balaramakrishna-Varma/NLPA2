@@ -135,26 +135,25 @@ def custom_collate(batch):
 ## Running Environment for code
 def ddp_setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '12535'
     init_process_group(backend='nccl', rank=rank, world_size=world_size)
 
 
-def main_distributed_GPU(rank, world_size):
+def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event):
     # Configuaration
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ddp_setup(rank, world_size)
     device = torch.device("cuda", rank)
 
 
 
     # Hyperparameters
-    embedding_dim = 128
-    hidden_dim  = 128
-    no_layers = 2
+    embedding_dim = hyper_params["embedding_dim"]
+    hidden_dim  = hyper_params["hidden_dim"]
+    no_layers = hyper_params["no_layers"]
     
-    epochs = 10
-    batch_size = 32
-    lr = 0.01
+    epochs = hyper_params["epochs"]
+    batch_size = hyper_params["batch_size"]
+    lr = hyper_params["lr"]
 
 
 
@@ -188,17 +187,39 @@ def main_distributed_GPU(rank, world_size):
 
 
   # Training
+    loss_values = torch.zeros((epochs, 2))
     for t in tqdm(range(epochs)):
         train_loop(model, loss_fn, optimizer, train_dataloader, device)
-        train_metrics = eval_model(model, loss_fn, train_dataloader, device)
-        dev_metrics = eval_model(model, loss_fn, dev_dataloader, device)
-    print("Done!")
+        loss_values[t, 0] = eval_model(model, loss_fn, train_dataloader, device)[0]   # Training Loss
+        loss_values[t, 1] = eval_model(model, loss_fn, dev_dataloader, device)[0]     # validation Loss
+    qeue.put(loss_values)
+    Event.wait()
     destroy_process_group()    
 
 
+def get_loss_values(hyperpar):
+    world_size = torch.cuda.device_count()
+    Events = [mp.Event() for _ in range(world_size)]
+    qeue = mp.SimpleQueue()
+    processes = []
+    for rank in range(world_size):
+        p = mp.Process(target=main_distributed_GPU, args=(rank, world_size, hyperpar, qeue, Events[rank]))
+        processes.append(p)
+        p.start()
+    
+    Data = torch.zeros((hyperpar["epochs"], 2))
+    for _ in range(world_size):
+        Data += qeue.get()
+
+    for event in Events:
+        event.set()
+    for p in processes:
+        p.join()
+
+    return Data
 
 
 if __name__ == "__main__":
-    world_size = torch.cuda.device_count()
-    print(world_size, "GPUs available")
-    mp.spawn(main_distributed_GPU, args=(world_size,), nprocs=world_size)
+    hyperpar = {"embedding_dim": 128, "hidden_dim": 128, "no_layers": 2, "epochs": 10, "batch_size": 32, "lr": 0.01}
+    Data = get_loss_values(hyperpar)
+    print(Data)
