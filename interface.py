@@ -1,6 +1,7 @@
 import sys
 import pickle
 import torch
+from torch.nn import Softmax
 import string
 from nltk.tokenize import word_tokenize
 
@@ -22,7 +23,7 @@ no_layers = 2
 
 model = helper.PosTagModel(len(vocabulary), len(pos_tag_index), embedding_dim, hidden_dim, no_layers)
 model.load_state_dict(torch.load('model_weights.pth'))
-
+sft_max = Softmax(dim=1)
 
 
 while(1):
@@ -38,6 +39,7 @@ while(1):
     input_to_model = torch.LongTensor(words_indexed)
 
     pred = model(input_to_model)
+    pred = sft_max(pred)
     
     assigned_tags_idx = torch.argmax(pred, dim=1)
     assigned_tags_idx = assigned_tags_idx.tolist()
