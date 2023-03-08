@@ -13,11 +13,6 @@ import os, sys
 
 
 
-if __name__ == "__main__" and sys.argv[1] == "TPU":
-    import torch_xla
-    import torch_xla.core.xla_model as xm
-
-
 # Main Abstraction
 class PosTagDataset(Dataset):
     def __init__(self, data_file):
@@ -72,7 +67,7 @@ def train_loop(model, loss_fn, optimizer, train_dataloader, device):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        
 
 def eval_model(model, loss_fn, data_loader, device):
     model.eval()
@@ -201,115 +196,9 @@ def main_distributed_GPU(rank, world_size):
     destroy_process_group()    
 
 
-def main__GPU():
-    # Configuaration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-
-    # Hyperparameters
-    embedding_dim = 128
-    hidden_dim  = 128
-    no_layers = 2
-    
-    epochs = 10
-    batch_size = 32
-    lr = 0.01
-
-
-
-
-    # Loading data
-    train_file = "./UD_English-Atis/en_atis-ud-train.conllu"
-    train_dataset = PosTagDataset(train_file)
-    train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
-
-    dev_file = "./UD_English-Atis/en_atis-ud-dev.conllu"
-    dev_dataset = PosTagDataset(dev_file)
-    dev_dataloader = DataLoader(dev_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
-
-    test_file = "./UD_English-Atis/en_atis-ud-test.conllu"
-    test_dataset = PosTagDataset(test_file)
-    test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
-
-
-
-
-    # Creating model loss function and optimizer
-    vocab_size = len(train_dataset.vocab_index)
-    no_pos_tags = len(train_dataset.pos_tag_index)
-
-    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0, reduction="sum")
-    model = PosTagModel(vocab_size, no_pos_tags, embedding_dim, hidden_dim, no_layers).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr)
-
-
-
-
-  # Training
-    for t in tqdm(range(epochs)):
-        train_loop(model, loss_fn, optimizer, train_dataloader, device)
-        train_metrics = eval_model(model, loss_fn, train_dataloader, device)
-        dev_metrics = eval_model(model, loss_fn, dev_dataloader, device)
-    print("Done!")
-    #torch.save(model.state_dict(), 'model_weights.pth')
-
-
-def main_tpu():
-    # Configuaration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-
-    # Hyperparameters
-    embedding_dim = 128
-    hidden_dim  = 128
-    no_layers = 2
-    
-    epochs = 10
-    batch_size = 32
-    lr = 0.01
-
-
-
-
-    # Loading data
-    train_file = "./UD_English-Atis/en_atis-ud-train.conllu"
-    train_dataset = PosTagDataset(train_file)
-    train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
-
-    dev_file = "./UD_English-Atis/en_atis-ud-dev.conllu"
-    dev_dataset = PosTagDataset(dev_file)
-    dev_dataloader = DataLoader(dev_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
-
-    test_file = "./UD_English-Atis/en_atis-ud-test.conllu"
-    test_dataset = PosTagDataset(test_file)
-    test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, collate_fn=custom_collate)
-
-
-
-
-    # Creating model loss function and optimizer
-    vocab_size = len(train_dataset.vocab_index)
-    no_pos_tags = len(train_dataset.pos_tag_index)
-
-    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0, reduction="sum")
-    model = PosTagModel(vocab_size, no_pos_tags, embedding_dim, hidden_dim, no_layers).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr)
-
-
-
-
 
 
 if __name__ == "__main__":
-    if(sys.argv[1] == "distributed-gpu"):
-        world_size = torch.cuda.device_count()
-        print(world_size, "GPUs available")
-        mp.spawn(main_distributed_GPU, args=(world_size,), nprocs=world_size)
-    elif(sys.argv[1] == "gpu"):
-        main__GPU()
-    elif(sys.argv[1] == "tpu"):
-        pass
-    else:
-        print("Invalid argument")
+    world_size = torch.cuda.device_count()
+    print(world_size, "GPUs available")
+    mp.spawn(main_distributed_GPU, args=(world_size,), nprocs=world_size)
