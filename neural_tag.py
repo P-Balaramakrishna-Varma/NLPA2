@@ -141,7 +141,7 @@ def ddp_setup(rank, world_size):
     init_process_group(backend='nccl', rank=rank, world_size=world_size)
 
 
-def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event):
+def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event, Store):
     # Configuaration
     ddp_setup(rank, world_size)
     device = torch.device("cuda", rank)
@@ -199,17 +199,20 @@ def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event):
     Event.wait()
 
     print(eval_model(model, loss_fn, test_dataloader, device))
+    if rank == 0 and Store == True:
+        param_data = model.module.state_dict()
+        torch.save(param_data, "model_weights.pth")
     destroy_process_group()    
 
 
-def get_loss_values(hyperpar):
+def get_loss_values(hyperpar, Save):
     world_size = torch.cuda.device_count()
     print("Number of GPUs: ", world_size)
     Events = [mp.Event() for _ in range(world_size)]
     qeue = mp.SimpleQueue()
     processes = []
     for rank in range(world_size):
-        p = mp.Process(target=main_distributed_GPU, args=(rank, world_size, hyperpar, qeue, Events[rank]))
+        p = mp.Process(target=main_distributed_GPU, args=(rank, world_size, hyperpar, qeue, Events[rank], Save))
         processes.append(p)
         p.start()
     
@@ -228,5 +231,5 @@ def get_loss_values(hyperpar):
 
 if __name__ == "__main__":
     hyperpar = {"embedding_dim": 128, "hidden_dim": 128, "no_layers": 2, "epochs": 10, "batch_size": 32, "lr": 0.01}
-    Data = get_loss_values(hyperpar)
+    Data = get_loss_values(hyperpar, False)
     print(Data)
