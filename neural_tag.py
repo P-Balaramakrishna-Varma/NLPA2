@@ -72,8 +72,8 @@ def train_loop(model, loss_fn, optimizer, train_dataloader, device):
 
 def eval_model(model, loss_fn, data_loader, device):
     model.eval()
-    y_true_report = torch.zeros((1,))
-    y_pred_report = torch.zeros((1,))
+    y_true_report = torch.ones((1,)).to(device)
+    y_pred_report = torch.ones((1,)).to(device)
     total_loss, correct, total_pred = 0, 0, 0
     with torch.no_grad():
         for X, y in data_loader:
@@ -87,9 +87,9 @@ def eval_model(model, loss_fn, data_loader, device):
             mask = y != 0
             correct += (pred.argmax(1)[mask] == y[mask]).type(torch.float).sum().item()
             total_pred += y[mask].shape[0]
-            torch.cat((y_true_report, y[mask]), 0)
-            torch.cat((y_pred_report, pred.argmax(1)[mask]), 0)  
-    return total_loss/ total_pred, (correct * 100) / total_pred, y_true_report, y_pred_report 
+            y_true_report = torch.cat((y_true_report, y[mask]), 0)
+            y_pred_report = torch.cat((y_pred_report, pred.argmax(1)[mask]), 0)  
+    return total_loss/ total_pred, (correct * 100) / total_pred, y_true_report.to(torch.device("cpu")), y_pred_report.to(torch.device("cpu")) 
 
 
 
