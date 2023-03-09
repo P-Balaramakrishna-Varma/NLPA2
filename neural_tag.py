@@ -141,7 +141,7 @@ def custom_collate(batch):
 ## Running Environment for code
 def ddp_setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12535'
+    os.environ['MASTER_PORT'] = '12540'
     init_process_group(backend='nccl', rank=rank, world_size=world_size)
 
 
