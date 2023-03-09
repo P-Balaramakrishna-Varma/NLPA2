@@ -18,4 +18,8 @@
     - A python notebook to help tune parameters.
 
 
+- Report.md
+    - user vscode markdown extenstion to view this file in neat format.
+    - The data gathered is not robust because I have not cross validation or experimented multiple times for each settings.
+
 Make sure ```UD_Englis-Atis``` directory is present in working directory.
