@@ -81,9 +81,10 @@ def eval_model(model, loss_fn, data_loader, device):
             loss = loss_fn(pred, y)
             
             total_loss += loss.item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-            total_pred += y.shape[0]
-    return total_loss, (correct * 100) / total_pred 
+            mask = y != 0
+            correct += (pred.argmax(1)[mask] == y[mask]).type(torch.float).sum().item()
+            total_pred += y[mask].shape[0]  
+    return total_loss/ total_pred, (correct * 100) / total_pred 
 
 
 
@@ -194,11 +195,14 @@ def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event):
         loss_values[t, 1] = eval_model(model, loss_fn, dev_dataloader, device)[0]     # validation Loss
     qeue.put(loss_values)
     Event.wait()
+
+    print(eval_model(model, loss_fn, test_dataloader, device))
     destroy_process_group()    
 
 
 def get_loss_values(hyperpar):
     world_size = torch.cuda.device_count()
+    print("Number of GPUs: ", world_size)
     Events = [mp.Event() for _ in range(world_size)]
     qeue = mp.SimpleQueue()
     processes = []
