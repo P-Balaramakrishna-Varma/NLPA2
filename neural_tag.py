@@ -14,9 +14,10 @@ import os, sys
 
 
 # Main Abstraction
+## vocabindex to created from traning file
 class PosTagDataset(Dataset):
-    def __init__(self, data_file):
-        self.vocab_index = get_vocab_index(data_file)
+    def __init__(self, data_file, vocab_index):
+        self.vocab_index = vocab_index
         self.pos_tag_index = {"Pad": 0, "ADJ": 17, "ADP": 1, "ADV": 2, "AUX": 3, "CCONJ": 4, "DET": 5, "INTJ": 6, "NOUN": 7, "NUM": 8, "PART": 9, "PRON": 10, "PROPN": 11, "PUNCT": 12, "SCONJ": 13, "SYM": 14, "VERB": 15, "X": 16}
         self.Sentences, self.Tag_Sequences = get_data(data_file, self.vocab_index, self.pos_tag_index)
 
@@ -115,7 +116,7 @@ def get_vocab_index(data_file):
     for TokenList in TokenLists:
         for token in TokenList:
             if token["form"] not in sigletons:
-                vocab_index[token["form"]] = 1
+                sigletons[token["form"]] = 1
             else:
                 if token["form"] not in vocab_index:
                     vocab_index[token["form"]] = len(vocab_index)
@@ -161,15 +162,16 @@ def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event):
 
     # Loading data
     train_file = "./UD_English-Atis/en_atis-ud-train.conllu"
-    train_dataset = PosTagDataset(train_file)
+    vocab_index = get_vocab_index(train_file)
+    train_dataset = PosTagDataset(train_file, vocab_index)
     train_dataloader = DataLoader(train_dataset, batch_size, shuffle=False, collate_fn=custom_collate, sampler=DistributedSampler(train_dataset))
 
     dev_file = "./UD_English-Atis/en_atis-ud-dev.conllu"
-    dev_dataset = PosTagDataset(dev_file)
+    dev_dataset = PosTagDataset(dev_file, vocab_index)
     dev_dataloader = DataLoader(dev_dataset, batch_size, shuffle=False, collate_fn=custom_collate, sampler=DistributedSampler(dev_dataset))
 
     test_file = "./UD_English-Atis/en_atis-ud-test.conllu"
-    test_dataset = PosTagDataset(test_file)
+    test_dataset = PosTagDataset(test_file, vocab_index)
     test_dataloader = DataLoader(test_dataset, batch_size, shuffle=False, collate_fn=custom_collate, sampler=DistributedSampler(test_dataset))
 
 
@@ -214,6 +216,7 @@ def get_loss_values(hyperpar):
     Data = torch.zeros((hyperpar["epochs"], 2))
     for _ in range(world_size):
         Data += qeue.get()
+    Data = Data / world_size
 
     for event in Events:
         event.set()
