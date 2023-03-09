@@ -22,4 +22,8 @@
     - user vscode markdown extenstion to view this file in neat format.
     - The data gathered is not robust because I have not cross validation or experimented multiple times for each settings.
 
+- save.p stores the vocabulary
+
+- model_weights.pth has model paramters which will be read by pos_tagger.py
+
 Make sure ```UD_Englis-Atis``` directory is present in working directory.
