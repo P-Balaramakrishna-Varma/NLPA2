@@ -9,8 +9,8 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os, sys
-
-
+import numpy
+from sklearn.metrics import classification_report
 
 
 # Main Abstraction
@@ -72,6 +72,8 @@ def train_loop(model, loss_fn, optimizer, train_dataloader, device):
 
 def eval_model(model, loss_fn, data_loader, device):
     model.eval()
+    y_true_report = torch.zeros((1,))
+    y_pred_report = torch.zeros((1,))
     total_loss, correct, total_pred = 0, 0, 0
     with torch.no_grad():
         for X, y in data_loader:
@@ -84,8 +86,10 @@ def eval_model(model, loss_fn, data_loader, device):
             total_loss += loss.item()
             mask = y != 0
             correct += (pred.argmax(1)[mask] == y[mask]).type(torch.float).sum().item()
-            total_pred += y[mask].shape[0]  
-    return total_loss/ total_pred, (correct * 100) / total_pred 
+            total_pred += y[mask].shape[0]
+            torch.cat((y_true_report, y[mask]), 0)
+            torch.cat((y_pred_report, pred.argmax(1)[mask]), 0)  
+    return total_loss/ total_pred, (correct * 100) / total_pred, y_true_report, y_pred_report 
 
 
 
@@ -198,7 +202,10 @@ def main_distributed_GPU(rank, world_size, hyper_params, qeue, Event, Store):
     qeue.put(loss_values)
     Event.wait()
 
-    print(eval_model(model, loss_fn, test_dataloader, device))
+    test_eval = eval_model(model, loss_fn, test_dataloader, device)
+    print("Testing accuracy", test_eval[1])
+    print(classification_report(test_eval[2].numpy(), test_eval[3].numpy()))
+
     if rank == 0 and Store == True:
         param_data = model.module.state_dict()
         torch.save(param_data, "model_weights.pth")
